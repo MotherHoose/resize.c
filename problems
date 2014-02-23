@@ -1,0 +1,191 @@
+/**
+ * resize.c
+ *
+ * edx - CS50 
+ * pset 5
+ * 
+ * Lorraine J. Hoose; MotherHoose@gmail.com
+ * February 2014
+ *
+ * based on copy.c 
+ * resize a BMP piece by piece, just because
+ */
+
+// check:    check50 2014/x/pset5/resize bmp.h resize.c
+      
+#include <stdio.h>
+#include <stdlib.h>
+#include "bmp.h"
+
+int main(int argc, char* argv[])
+{
+    // ensure proper usage
+    if (argc != 4)
+    {
+        printf("Usage: ./resize n infile outfile\n");
+        return 1;
+    }
+
+    // get reSize factor
+    int factor = atoi(argv[1]);
+        
+    // verify factor in range
+    if (factor < 0 || factor > 100)
+    {
+        printf("Resize factor must be a positive interger < 100.\n");
+        return 2;
+    }
+    // remember filenames
+    char* infile = argv[2];
+    char* outfile = argv[3];
+
+    // open input file 
+    FILE* inptr = fopen(infile, "r");
+    if (inptr == NULL)
+    {
+        printf("Could not open %s.\n", infile);
+        return 3;
+    }
+
+    // open output file
+    FILE* outptr = fopen(outfile, "w");
+    if (outptr == NULL)
+    {
+        fclose(inptr);
+        fprintf(stderr, "Could not create %s.\n", outfile);
+        return 4;
+    }
+
+    // read infile's BITMAPFILEHEADER
+    BITMAPFILEHEADER bf;
+    fread(&bf, sizeof(BITMAPFILEHEADER), 1, inptr);
+    
+    // read infile's BITMAPINFOHEADER
+    BITMAPINFOHEADER bi;
+    fread(&bi, sizeof(BITMAPINFOHEADER), 1, inptr);    
+
+    // ensure infile is (likely) a 24-bit uncompressed BMP 4.0
+    if (bf.bfType != 0x4d42 || bf.bfOffBits != 54 || bi.biSize != 40 || 
+        bi.biBitCount != 24 || bi.biCompression != 0)
+    {
+        fclose(outptr);
+        fclose(inptr);
+        fprintf(stderr, "Unsupported file format.\n");
+        return 4;
+    }
+   
+    // variables: infoHeader orignal ... height can be negative use absolute
+    int widthOrig = bi.biWidth;
+    int heightOrig = abs(bi.biHeight);
+    
+    // original padding
+    int paddingOrig =  (4 - (bi.biWidth * sizeof(RGBTRIPLE)) % 4) % 4;
+    
+    // **** struct for new bi
+    BITMAPINFOHEADER newbi;
+    newbi = bi;
+    newbi.biWidth = widthOrig * factor;
+    newbi.biHeight = heightOrig * factor;	
+    newbi.biSizeImage = newbi.biWidth * sizeof(RGBTRIPLE) * newbi.biHeight;
+
+    // padding needed? use in sizeImage
+    int paddingNew =  (4 - (newbi.biWidth * sizeof(RGBTRIPLE)) % 4) % 4;
+
+    // variables for new bf -- calculate: newSizeImage and new fileSize
+    int newSizeImage = 
+        ((newbi.biWidth * sizeof(RGBTRIPLE) + paddingNew) * newbi.biHeight);
+
+    // **** struct for new bf ... yuck that 54 is from others online
+    // 54 bytes allocated for other data in header ???
+    // gdb: bfOffBits = 54 ............  ????
+    BITMAPFILEHEADER newbf;
+    newbf = bf;
+    newbf.bfSize = newSizeImage + 54;
+    
+    // write the new fileHeader
+    fwrite(&newbf, sizeof(BITMAPFILEHEADER), 1, outptr);
+    
+    // write the new infoHeader
+    fwrite(&newbi, sizeof(BITMAPINFOHEADER), 1, outptr);   
+
+// *********  COMPILES AND RUNS ***  *** YUCK IMAGE !!!!!!!!!!!!!!!!!
+
+
+// peek at the headers ... all fields match staff's ;}
+
+// TODO a run with check50 (just todos)  ;{
+
+// valgrind (no leaks; no errors)   ;}
+ 
+// gdb ...  ;}
+    // new padding was incorrect(fixed) 
+    // then runs program fine ;}
+    
+// TODO xxd  and compare with staff's    
+
+// **********************************  PROBLEM IS IN THE WRITING ???
+
+// *********** TODO Write the content of newImage
+
+// i: imageOrig height
+// j: widthOrig
+// n: heightNew
+// new: widthNew and write it
+// pad: padding
+
+    // iterate over infiles scanlines
+    for (int i = 0; i < heightOrig; i++)
+    {
+        // write line rgb triple factor* for verticals
+        for (int n = 0; n < factor; n++)
+        {      
+            // read each pixel in scanline ...for horizontals
+            for (int j = 0; j < widthOrig; j++)
+            {
+                // temporary storage
+                RGBTRIPLE triple;
+
+                // read RGB triple from infile to temp
+                fread(&triple, sizeof(RGBTRIPLE), 1, inptr);
+
+                // write RGB triple to outfile factor*
+                for(int new = 0; new < factor; new++) 
+                {
+                    fwrite(&triple, sizeof(RGBTRIPLE), 1, outptr);                    
+                // ==== end new loop    
+                }
+
+            // ==== end j loop    
+            }
+            
+            // skip over paddingOrig -- inFile
+            fseek(outptr, paddingOrig, SEEK_CUR);
+                    
+            // add paddingNew to row -- outFile
+            for (int pad = 0; pad < paddingNew; pad++)
+            {
+                fputc(0x00, outptr); 
+            }            
+
+            // if the iteration is < factor do fseek
+            // goto start of line for each iteration of n
+            // the n does not increment till completed: n + 1            
+            if (n + 1 < factor)
+            {
+                fseek(inptr, -(widthOrig + paddingOrig), SEEK_CUR);
+            }           
+        // ==== end n loop
+        }
+
+    // ==== end i loop
+    }
+
+    // close infile
+    fclose(inptr);
+
+    // close outfile
+    fclose(outptr);
+
+    // that's all folks
+    return 0;
+}
